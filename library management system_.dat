@@ -1,0 +1,486 @@
+#include <iostream>
+#include <vector>
+#include <fstream>
+#include <string>
+#include <algorithm>
+
+using namespace std;
+
+// Book class
+class Book {
+private:
+    string bookTitle;
+    string bookAuthor;
+    string bookISBN;
+    bool isAvailable;
+
+public:
+    Book(string title = "", string author = "", string isbn = "")
+        : bookTitle(title), bookAuthor(author), bookISBN(isbn), isAvailable(true) {}
+
+    // Getters
+    string getTitle() const { return bookTitle; }
+    string getAuthor() const { return bookAuthor; }
+    string getISBN() const { return bookISBN; }
+    bool isBookAvailable() const { return isAvailable; }
+
+    // Setters
+    void markBorrowed() { isAvailable = false; }
+    void markReturned() { isAvailable = true; }
+
+    void showInfo() const {
+        cout << "ISBN: " << bookISBN << " - \"" << bookTitle << "\" by " << bookAuthor 
+             << " - " << (isAvailable ? "Available" : "Borrowed") << endl;
+    }
+    
+    void showInfoShort() const {
+        cout << "ISBN: " << bookISBN << " - \"" << bookTitle << "\" by " << bookAuthor << endl;
+    }
+    
+    void showInfoISBNOnly() const {
+        cout << "ISBN: " << bookISBN << " - \"" << bookTitle << "\"" 
+             << " - " << (isAvailable ? "Available" : "Borrowed") << endl;
+    }
+};
+
+// LibraryUser class
+class LibraryUser {
+private:
+    string userId;
+    string userName;
+    vector<string> borrowedBookISBNs;
+
+public:
+    LibraryUser(string id = "", string name = "") : userId(id), userName(name) {}
+
+    string getID() const { return userId; }
+    string getName() const { return userName; }
+    vector<string> getBorrowedBooks() const { return borrowedBookISBNs; }
+
+    void borrowBook(string isbn) {
+        borrowedBookISBNs.push_back(isbn);
+    }
+
+    bool returnBook(string isbn) {
+        auto it = find(borrowedBookISBNs.begin(), borrowedBookISBNs.end(), isbn);
+        if (it != borrowedBookISBNs.end()) {
+            borrowedBookISBNs.erase(it);
+            return true;
+        }
+        return false;
+    }
+
+    void showBorrowedBooks(const vector<Book>& allBooks) const {
+        if (borrowedBookISBNs.empty()) {
+            cout << userName << " has no borrowed books." << endl;
+            return;
+        }
+        cout << userName << "'s borrowed books:" << endl;
+        for (const auto& isbn : borrowedBookISBNs) {
+            // Find the book details using ISBN
+            auto bookIt = find_if(allBooks.begin(), allBooks.end(),
+                [&](const Book& b) { return b.getISBN() == isbn; });
+            
+            if (bookIt != allBooks.end()) {
+                cout << "- ISBN: " << isbn << " - \"" << bookIt->getTitle() << "\"" << endl;
+            } else {
+                cout << "- ISBN: " << isbn << " (Book details not found)" << endl;
+            }
+        }
+    }
+
+    void showInfo() const {
+        cout << "User ID: " << userId << " - Name: " << userName 
+             << " - Books borrowed: " << borrowedBookISBNs.size() << endl;
+    }
+};
+
+// Library class - main system
+class LibrarySystem {
+private:
+    vector<Book> books;
+    vector<LibraryUser> users;
+    const string booksFile = "library_books.dat";
+    const string usersFile = "library_users.dat";
+
+    // File operations
+    void loadData() {
+        loadBooks();
+        loadUsers();
+    }
+
+    void saveData() {
+        saveBooks();
+        saveUsers();
+    }
+
+    void loadBooks() {
+        ifstream file(booksFile);
+        if (!file) return;
+
+        string title, author, isbn;
+        bool available;
+        while (getline(file, title) && getline(file, author) && 
+               getline(file, isbn) && file >> available) {
+            file.ignore();
+            Book newBook(title, author, isbn);
+            if (!available) newBook.markBorrowed();
+            books.push_back(newBook);
+        }
+        file.close();
+    }
+
+    void loadUsers() {
+        ifstream file(usersFile);
+        if (!file) return;
+
+        string id, name, isbn;
+        int count;
+        while (getline(file, id) && getline(file, name) && file >> count) {
+            file.ignore();
+            LibraryUser user(id, name);
+            for (int i = 0; i < count; i++) {
+                getline(file, isbn);
+                user.borrowBook(isbn);
+            }
+            users.push_back(user);
+        }
+        file.close();
+    }
+
+    void saveBooks() {
+        ofstream file(booksFile);
+        for (const auto& book : books) {
+            file << book.getTitle() << endl
+                 << book.getAuthor() << endl
+                 << book.getISBN() << endl
+                 << book.isBookAvailable() << endl;
+        }
+        file.close();
+    }
+
+    void saveUsers() {
+        ofstream file(usersFile);
+        for (const auto& user : users) {
+            file << user.getID() << endl
+                 << user.getName() << endl
+                 << user.getBorrowedBooks().size() << endl;
+            
+            for (const auto& isbn : user.getBorrowedBooks()) {
+                file << isbn << endl;
+            }
+        }
+        file.close();
+    }
+
+    Book* findBook(string isbn) {
+        for (auto& book : books) {
+            if (book.getISBN() == isbn) {
+                return &book;
+            }
+        }
+        return nullptr;
+    }
+
+    LibraryUser* findUser(string userId) {
+        for (auto& user : users) {
+            if (user.getID() == userId) {
+                return &user;
+            }
+        }
+        return nullptr;
+    }
+
+    // Show available books for borrowing (ISBN first)
+    void showAvailableBooks() const {
+        cout << "\n=== AVAILABLE BOOKS (ISBN FIRST) ===" << endl;
+        bool found = false;
+        for (const auto& book : books) {
+            if (book.isBookAvailable()) {
+                book.showInfoISBNOnly();
+                found = true;
+            }
+        }
+        if (!found) {
+            cout << "No books available for borrowing at the moment." << endl;
+        }
+    }
+
+public:
+    LibrarySystem() {
+        loadData();
+        cout << "Library system loaded with " << books.size() 
+             << " books and " << users.size() << " users." << endl;
+    }
+
+    ~LibrarySystem() {
+        saveData();
+        cout << "Library data saved successfully." << endl;
+    }
+
+    // Book operations
+    void addNewBook(string title, string author, string isbn) {
+        if (findBook(isbn)) {
+            cout << "Error: Book with this ISBN already exists!" << endl;
+            return;
+        }
+        books.emplace_back(title, author, isbn);
+        cout << "Book added successfully!" << endl;
+    }
+
+    void removeBook(string isbn) {
+        auto it = remove_if(books.begin(), books.end(),
+            [&](const Book& b) { return b.getISBN() == isbn; });
+        
+        if (it != books.end()) {
+            books.erase(it, books.end());
+            cout << "Book removed successfully!" << endl;
+        } else {
+            cout << "Error: Book not found!" << endl;
+        }
+    }
+
+    // User operations
+    void registerNewUser(string userId, string name) {
+        if (findUser(userId)) {
+            cout << "Error: User ID already exists!" << endl;
+            return;
+        }
+        users.emplace_back(userId, name);
+        cout << "User registered successfully!" << endl;
+    }
+
+    void removeUser(string userId) {
+        auto it = remove_if(users.begin(), users.end(),
+            [&](const LibraryUser& u) { return u.getID() == userId; });
+        
+        if (it != users.end()) {
+            users.erase(it, users.end());
+            cout << "User removed successfully!" << endl;
+        } else {
+            cout << "Error: User not found!" << endl;
+        }
+    }
+
+    // Borrow book - show available books first (ISBN focused)
+    void borrowBookForUser(string userId) {
+        LibraryUser* user = findUser(userId);
+        if (!user) {
+            cout << "Error: User not found!" << endl;
+            return;
+        }
+
+        // Show available books with ISBN first
+        showAvailableBooks();
+        
+        if (books.empty()) {
+            cout << "No books in the library to borrow." << endl;
+            return;
+        }
+
+        string isbn;
+        cout << "\nEnter the ISBN of the book you want to borrow: ";
+        getline(cin, isbn);
+
+        Book* book = findBook(isbn);
+        if (!book) {
+            cout << "Error: Book not found!" << endl;
+            return;
+        }
+        if (!book->isBookAvailable()) {
+            cout << "Error: Book is already borrowed!" << endl;
+            return;
+        }
+
+        book->markBorrowed();
+        user->borrowBook(isbn);
+        cout << "Book \"" << book->getTitle() << "\" (ISBN: " << isbn 
+             << ") borrowed successfully by " << user->getName() << "!" << endl;
+    }
+
+    // Return book - show user's borrowed books first (ISBN focused)
+    void returnBookFromUser(string userId) {
+        LibraryUser* user = findUser(userId);
+        if (!user) {
+            cout << "Error: User not found!" << endl;
+            return;
+        }
+
+        // Show what books the user has borrowed (ISBN focused)
+        cout << "\nBooks borrowed by " << user->getName() << ":" << endl;
+        vector<string> borrowed = user->getBorrowedBooks();
+        if (borrowed.empty()) {
+            cout << "No books borrowed." << endl;
+            return;
+        }
+        
+        for (const auto& isbn : borrowed) {
+            Book* book = findBook(isbn);
+            if (book) {
+                cout << "- ISBN: " << isbn << " - \"" << book->getTitle() << "\"" << endl;
+            } else {
+                cout << "- ISBN: " << isbn << " (Book not found in library)" << endl;
+            }
+        }
+
+        string isbn;
+        cout << "\nEnter the ISBN of the book you want to return: ";
+        getline(cin, isbn);
+
+        if (!user->returnBook(isbn)) {
+            cout << "Error: User hasn't borrowed this book!" << endl;
+            return;
+        }
+
+        Book* book = findBook(isbn);
+        if (book) {
+            book->markReturned();
+            cout << "Book \"" << book->getTitle() << "\" (ISBN: " << isbn 
+                 << ") returned successfully!" << endl;
+        } else {
+            cout << "Book with ISBN " << isbn << " returned successfully!" << endl;
+        }
+    }
+
+    // Display functions - now show ISBN first
+    void showAllBooks() const {
+        cout << "\n=== ALL LIBRARY BOOKS (ISBN FIRST) ===" << endl;
+        if (books.empty()) {
+            cout << "No books in the library." << endl;
+            return;
+        }
+        for (const auto& book : books) {
+            book.showInfoISBNOnly();
+        }
+    }
+
+    void showAllUsers() const {
+        cout << "\n=== REGISTERED USERS ===" << endl;
+        if (users.empty()) {
+            cout << "No registered users." << endl;
+            return;
+        }
+        for (const auto& user : users) {
+            user.showInfo();
+        }
+    }
+
+    void showUserBooks(string userId) const {
+        auto it = find_if(users.begin(), users.end(),
+            [&](const LibraryUser& u) { return u.getID() == userId; });
+        
+        if (it != users.end()) {
+            it->showBorrowedBooks(books);
+        } else {
+            cout << "Error: User not found!" << endl;
+        }
+    }
+};
+
+// Simple menu system
+void showMenu() {
+    cout << " LIBRARY MANAGEMENT SYSTEM " << endl;
+    cout << "1. Add New Book" << endl;
+    cout << "2. Remove Book" << endl;
+    cout << "3. Register New User" << endl;
+    cout << "4. Remove User" << endl;
+    cout << "5. Borrow Book" << endl;
+    cout << "6. Return Book" << endl;
+    cout << "7. View All Books" << endl;
+    cout << "8. View All Users" << endl;
+    cout << "9. View User's Books" << endl;
+    cout << "0. Exit" << endl;
+    cout << "Choose an option (0-9): ";
+}
+
+// Clear input buffer
+void clearInput() {
+    cin.clear();
+    cin.ignore(1000, '\n');
+}
+
+int main() {
+    LibrarySystem library;
+    int choice;
+    
+    do {
+        showMenu();
+        cin >> choice;
+        clearInput();
+        
+        string title, author, isbn, userId, name;
+        
+        switch (choice) {
+            case 1:
+                cout << "Enter book title: ";
+                getline(cin, title);
+                cout << "Enter author: ";
+                getline(cin, author);
+                cout << "Enter ISBN: ";
+                getline(cin, isbn);
+                library.addNewBook(title, author, isbn);
+                break;
+                
+            case 2:
+                cout << "Enter ISBN to remove: ";
+                getline(cin, isbn);
+                library.removeBook(isbn);
+                break;
+                
+            case 3:
+                cout << "Enter user ID: ";
+                getline(cin, userId);
+                cout << "Enter user name: ";
+                getline(cin, name);
+                library.registerNewUser(userId, name);
+                break;
+                
+            case 4:
+                cout << "Enter user ID to remove: ";
+                getline(cin, userId);
+                library.removeUser(userId);
+                break;
+                
+            case 5:
+                cout << "Enter your user ID: ";
+                getline(cin, userId);
+                library.borrowBookForUser(userId);
+                break;
+                
+            case 6:
+                cout << "Enter your user ID: ";
+                getline(cin, userId);
+                library.returnBookFromUser(userId);
+                break;
+                
+            case 7:
+                library.showAllBooks();
+                break;
+                
+            case 8:
+                library.showAllUsers();
+                break;
+                
+            case 9:
+                cout << "Enter user ID: ";
+                getline(cin, userId);
+                library.showUserBooks(userId);
+                break;
+                
+            case 0:
+                cout << "Thank you for using the Library System! Goodbye!" << endl;
+                break;
+                
+            default:
+                cout << "Invalid choice! Please try again." << endl;
+        }
+        
+        if (choice != 0) {
+            cout << "\nPress Enter to continue...";
+            cin.get();
+        }
+        
+    } while (choice != 0);
+    
+    return 0;
+}
